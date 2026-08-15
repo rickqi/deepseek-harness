@@ -434,6 +434,23 @@
   display: none;
 }
 
+/* Recognized file-path highlight: a distinct tint + dotted underline over
+   the draft's own glyphs (advance untouched, same two-layer contract as
+   .textRef). Ctrl/⌘+click on the range opens the path via the host. */
+.pathRef {
+  background-color: rgba(47, 128, 237, 0.10);
+  color: var(--dsw-alias-state-business-primary);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.pathRef:after {
+  display: none;
+}
+
 /* Reference chip: rendered in the backdrop at the placeholder offset. Hard
    alignment constraint: the chip's advance must equal the textarea's U+FFFC
    advance EXACTLY or every glyph after it drifts (caret/selection follow the

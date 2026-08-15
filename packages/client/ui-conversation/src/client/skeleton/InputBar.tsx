@@ -34,7 +34,7 @@ import { PermissionSelect } from './PermissionSelect.tsx'
 import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
-const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], hint: null }
+const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], pathRefs: [], hint: null }
 
 /** Rail thumbnail carrying its source attachment for the open/remove callbacks. */
 interface ComposerRailItem extends AttachmentRailItem {
@@ -45,7 +45,7 @@ export type InputBarProps = ComposerBarProps
 
 export function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
-  resolveSubmitMode, toggleCommandMenu, stop, command, t,
+  resolveSubmitMode, toggleCommandMenu, stop, command, openPath, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
@@ -524,6 +524,20 @@ export function InputBar({
     void e
   }
 
+  // Ctrl/⌘+click inside a highlighted file-path range opens that path with
+  // the Host's default application (IDE-style navigation). The textarea
+  // overlays the decoration backdrop, so the gesture lives here, keyed on
+  // the caret position the click just produced.
+  const onComposerClick = (e: React.MouseEvent<HTMLTextAreaElement>): void => {
+    if (openPath === undefined || !(e.ctrlKey || e.metaKey)) return
+    const el = e.currentTarget
+    const caret = el.selectionStart ?? el.value.length
+    const hit = deco.pathRefs.find(range => caret >= range.start && caret <= range.end)
+    if (hit === undefined) return
+    e.preventDefault()
+    openPath(hit.path)
+  }
+
   // Button presses steal focus from the textarea; suppress at mousedown so
   // typing continues seamlessly. `preventScroll` for the same reason as the
   // unlock effect, and with no reveal of its own: the caret has not moved, and
@@ -588,9 +602,11 @@ export function InputBar({
     type Boundary =
       | { at: number; kind: 'chip'; chip: (typeof deco.chips)[number] }
       | { at: number; kind: 'text-ref'; ref: (typeof deco.textRefs)[number] }
+      | { at: number; kind: 'path'; ref: (typeof deco.pathRefs)[number] }
     const boundaries: Boundary[] = [
       ...deco.chips.map(chip => ({ at: chip.offset, kind: 'chip' as const, chip })),
       ...deco.textRefs.map(ref => ({ at: ref.start, kind: 'text-ref' as const, ref })),
+      ...deco.pathRefs.map(ref => ({ at: ref.start, kind: 'path' as const, ref })),
     ].sort((a, b) => a.at - b.at)
     for (const b of boundaries) {
       if (b.at < cursor) continue // claim-token overlap: the leading mark wins
@@ -613,6 +629,21 @@ export function InputBar({
           </span>,
         )
         cursor = chip.offset + 1 // the placeholder char the chip stands for
+      } else if (b.kind === 'path') {
+        // Recognized file-path highlight: glyphs stay the textarea's
+        // (advance untouched); the mark paints the path look. Ctrl/⌘+click
+        // on the span's caret position opens the path (see onComposerClick).
+        backdrop.push(
+          <mark
+            key={`path-${b.ref.start}`}
+            className={css.pathRef}
+            data-decoration="path"
+            title={b.ref.path}
+          >
+            {draft.slice(b.ref.start, b.ref.end)}
+          </mark>,
+        )
+        cursor = b.ref.end
       } else {
         // Plain-range highlight: the glyphs stay the
         // textarea's (advance untouched); the mark paints the chip look.
@@ -723,6 +754,7 @@ export function InputBar({
               onCopy={(e) => { onCopyOrCut(e, false) }}
               onCut={(e) => { onCopyOrCut(e, true) }}
               onPaste={onPaste}
+              onClick={onComposerClick}
               onCompositionStart={onCompositionStart}
               onCompositionEnd={onCompositionEnd}
             />

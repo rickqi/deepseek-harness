@@ -517,6 +517,12 @@ export interface ComposerBarInjected {
    */
   command: ((line: string) => Promise<boolean>) | undefined
   /**
+   * Open a recognized draft file path with the Host operating system's
+   * default application (the Ctrl/⌘+click action on a highlighted path
+   * range); absent with the session.
+   */
+  openPath: ((path: string) => void) | undefined
+  /**
    * Registrant hooks compartment: the renderer binds these to
    * useNotices/useLexicon (static absent sources without a session — hook
    * order stays constant).

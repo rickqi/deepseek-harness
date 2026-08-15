@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import type { CommandClaim, ReferenceInsert, TokenSpan } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { InputEffect, SubmitAttempt } from '../src/client/input/contract.ts'
 import { InputMachine, PLACEHOLDER, projectClipboard } from '../src/client/input/machine.ts'
-import { deriveDecorations, scanTextRefs } from '../src/client/input/decorations.ts'
+import { deriveDecorations, scanPathRefs, scanTextRefs } from '../src/client/input/decorations.ts'
 
 const P = PLACEHOLDER
 
@@ -666,6 +666,60 @@ describe('decorations: scanTextRefs', () => {
   })
 })
 
+describe('decorations: scanPathRefs', () => {
+  it('recognizes absolute paths at line start and after whitespace', () => {
+    expect(scanPathRefs('/root/a/b.txt')).toEqual([
+      { start: 0, end: 13, path: '/root/a/b.txt' },
+    ])
+  })
+
+  it('recognizes multiple paths and ./ ../ ~/ relative forms in draft order', () => {
+    expect(scanPathRefs('see ./x/y.md and /etc/hosts or ~/z/w.log')).toEqual([
+      { start: 4, end: 12, path: './x/y.md' },
+      { start: 17, end: 27, path: '/etc/hosts' },
+      { start: 31, end: 40, path: '~/z/w.log' },
+    ])
+  })
+
+  it('a single-segment /name is a command token, not a path', () => {
+    expect(scanPathRefs('/goal /commit-helper')).toEqual([])
+  })
+
+  it('URL remnants and protocol-relative tokens are not paths', () => {
+    expect(scanPathRefs('see https://a/b/c here')).toEqual([])
+  })
+
+  it('recognizes UNC backslash paths like \\\\wsl.localhost\\share\\dir\\file.xlsx', () => {
+    expect(scanPathRefs('open \\\\wsl.localhost\\Ubuntu-22.04\\root\\HMC\\HMC1\\待核对清单.xlsx please'))
+      .toEqual([{ start: 5, end: 58, path: '\\\\wsl.localhost\\Ubuntu-22.04\\root\\HMC\\HMC1\\待核对清单.xlsx' }])
+  })
+
+  it('recognizes Windows drive paths with backslash or forward slash', () => {
+    expect(scanPathRefs('copy C:\\Users\\me\\file.txt and D:/tmp/other.log')).toEqual([
+      { start: 5, end: 25, path: 'C:\\Users\\me\\file.txt' },
+      { start: 30, end: 46, path: 'D:/tmp/other.log' },
+    ])
+  })
+
+  it('a bare drive root or lone backslashes are not paths', () => {
+    expect(scanPathRefs('go C:\\ now \\\\nope')).toEqual([])
+  })
+
+  it('trailing sentence punctuation is trimmed from the path', () => {
+    expect(scanPathRefs('open /tmp/a/b.docx.')).toEqual([
+      { start: 5, end: 18, path: '/tmp/a/b.docx' },
+    ])
+  })
+
+  it('deriveDecorations carries the path ranges through', () => {
+    const m = new InputMachine()
+    m.dispatch({ type: 'draft-changed', draft: 'read /etc/hosts now' })
+    expect(deriveDecorations(m.state).pathRefs).toEqual([
+      { start: 5, end: 15, path: '/etc/hosts' },
+    ])
+  })
+})
+
 describe('input-machine: decorations', () => {
   it('projects chips from the occurrence table with identity, offset, label, and invalid bit', () => {
     const m = new InputMachine()
@@ -676,6 +730,7 @@ describe('input-machine: decorations', () => {
       token: null,
       chips: [{ occurrenceId: 1, offset: 0, label: 'alpha', invalid: true }],
       textRefs: [],
+      pathRefs: [],
       hint: null,
     })
   })
@@ -688,6 +743,7 @@ describe('input-machine: decorations', () => {
       token: { start: 0, end: 6 },
       chips: [],
       textRefs: [],
+      pathRefs: [],
       hint: 'objective',
     })
     m.dispatch({ type: 'draft-changed', draft: '/goal x' })
@@ -697,7 +753,7 @@ describe('input-machine: decorations', () => {
   it('the token range persists through submitting; a hintless claim never ghosts', () => {
     const m = new InputMachine()
     enterSubmitting(m, 'goal', '')
-    expect(deriveDecorations(m.state)).toEqual({ token: { start: 0, end: 6 }, chips: [], textRefs: [], hint: null })
+    expect(deriveDecorations(m.state)).toEqual({ token: { start: 0, end: 6 }, chips: [], textRefs: [], pathRefs: [], hint: null })
   })
 })
 

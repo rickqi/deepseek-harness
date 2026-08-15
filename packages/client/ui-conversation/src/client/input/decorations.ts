@@ -36,7 +36,21 @@ export interface TextRefRange {
   readonly trigger: '/' | '@'
 }
 
-/** Decoration product: claim token range + chip instructions + text-ref ranges + the ghost hint. */
+/**
+ * One recognized file-path range in the draft (the plain-text-path decision).
+ * Path-shaped tokens are highlighted so the user sees the composer recognise
+ * a file path they typed; Ctrl/⌘+click on the highlighted range opens the
+ * path through the host (`workspaces.openPath`). Pure derivation — editing
+ * the text out of path shape simply drops the range next scan.
+ */
+export interface PathRefRange {
+  readonly start: number
+  readonly end: number
+  /** The recognised path token (leading `./`, `../`, `~/` or `/` prefixes preserved). */
+  readonly path: string
+}
+
+/** Decoration product: claim token range + chip instructions + text-ref ranges + path ranges + the ghost hint. */
 export interface DraftDecorations {
   /** Claim token range while claimed/submitting and the prefix watch holds; null otherwise. */
   readonly token: TokenRange | null
@@ -44,6 +58,8 @@ export interface DraftDecorations {
   readonly chips: readonly ChipRender[]
   /** Scan-derived plain-text reference ranges (empty without a lexicon). */
   readonly textRefs: readonly TextRefRange[]
+  /** Scan-derived file-path ranges (independent of the lexicon). */
+  readonly pathRefs: readonly PathRefRange[]
   /** Ghost hint shown while the claim's args are blank; null otherwise. */
   readonly hint: string | null
 }
@@ -78,6 +94,66 @@ export function scanTextRefs(
   return out
 }
 
+/**
+ * Path-token matcher (forward-slash family): a leading `/`, `./`, `../` or
+ * `~/` prefix then a path-ish run (no whitespace, no common CJK/ASCII
+ * punctuation).
+ */
+const FORWARD_PATH_RE = /(^|\s)((?:\/|\.{1,2}\/|~\/)[^\s，。、；：,;:（）()\[\]{}"'<>]+)/g
+/**
+ * Path-token matcher (backslash family): UNC `\\server\share\…` (at least
+ * server + share), or a drive path `X:\…` / `X:/…` (forward-slash drive
+ * paths ride here too — the forward matcher cannot see them because the `/`
+ * is glued to the drive letter's `:`).
+ */
+const BACKSLASH_PATH_RE = /(^|\s)((?:\\\\[^\s\\]+\\[^\s\\]+(?:\\[^\s\\]+)*)|(?:[A-Za-z]:[\\/][^\s，。、；：,;:（）()\[\]{}"'<>]+))/g
+/** Trailing punctuation (or a stray separator) that can belong to a sentence, not the path. */
+const TRAILING_PUNCT = /[/\\.,;:。，；：]+$/
+
+/**
+ * Whether a matched path token is worth highlighting: not a URL-ish
+ * `//`/`///` remnant and at least two non-empty path segments (a bare
+ * single-segment `/name` is a command token, never a path).
+ */
+function plausiblePath(token: string): boolean {
+  if (token.startsWith('//')) return false
+  const segments = token.split(/[\\/]/).filter(segment => segment !== '')
+  return segments.length >= 2
+}
+
+/** Normalize one matched token: trim trailing punctuation, drop empty results. */
+function toPathRef(match: RegExpExecArray): PathRefRange | null {
+  const raw = match[2] ?? ''
+  const path = raw.replace(TRAILING_PUNCT, '')
+  if (path === '' || !plausiblePath(path)) return null
+  const start = match.index + (match[1]?.length ?? 0)
+  return { start, end: start + path.length, path }
+}
+
+/**
+ * Scan the draft for path-shaped tokens: absolute (`/a/b`, `\\server\share`,
+ * `X:\…`), `./`/`../`/`~/`-relative, or `.\`/`..\`/`~\`-relative forms with
+ * at least two segments. Pure text scan — no filesystem resolution, so
+ * nothing here can fail on a stale or moved file; the range only says "this
+ * draft span looks like a file path".
+ * @param draft - draft text.
+ * @returns matched ranges in draft order.
+ */
+export function scanPathRefs(draft: string): PathRefRange[] {
+  if (draft === '') return []
+  const out: PathRefRange[] = []
+  for (const re of [FORWARD_PATH_RE, BACKSLASH_PATH_RE]) {
+    re.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(draft)) !== null) {
+      const ref = toPathRef(m)
+      if (ref !== null) out.push(ref)
+    }
+  }
+  out.sort((a, b) => a.start - b.start)
+  return out
+}
+
 /** The empty lexicon (default: zero text-ref decorations, old call sites unchanged). */
 const EMPTY_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
 
@@ -103,5 +179,5 @@ export function deriveDecorations(
   const hint = claimActive && claim.hint !== undefined && draft.slice(claim.token.length).trim() === ''
     ? claim.hint
     : null
-  return { token, chips, textRefs: scanTextRefs(draft, lexicon), hint }
+  return { token, chips, textRefs: scanTextRefs(draft, lexicon), pathRefs: scanPathRefs(draft), hint }
 }

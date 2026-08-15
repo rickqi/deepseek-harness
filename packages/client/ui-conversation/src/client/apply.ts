@@ -297,6 +297,7 @@ export function apply(ctx: Context): void {
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
+          openPath: undefined,
           hooks: { notices: ABSENT_NOTICES, lexicon: ABSENT_LEXICON, menuLauncher: ABSENT_MENU_LAUNCHER },
         }
       }
@@ -350,6 +351,12 @@ export function apply(ctx: Context): void {
           if (session === undefined) return false
           const result = await session.command(line)
           return result.ok && result.value.matched
+        },
+        openPath: (path) => {
+          // Mirrors the assistant file-mention open: host-side default-app
+          // open; failures are user-visible on the workspace side and must
+          // not surface as a composer error.
+          void workspaces.openPath(path).catch(() => {})
         },
         hooks: {
           notices: shell.notices,
