@@ -14,7 +14,7 @@ Status: implemented
 
 `decorations.scanPathRefs(draft)` 识别两个结构性家族，均要求至少两个非空段：正斜杠家族（`/a/b`、`./x/y`、`../x/y`、`~/x/y`）与反斜杠家族（UNC `\\server\share\…`、盘符 `X:\…` 与 `X:/…`）。它绝不匹配单段 `/name` 命令 token、URL 残留（`https://…`、协议相对 `//…`）、裸盘符根（`C:\`）或孤立反斜杠，并会裁剪句末标点（`open /tmp/a/b.docx.` 高亮 `/tmp/a/b.docx`）。扫描纯属结构判断——击键时不做任何文件系统解析——因此过期或移动过的路径仍会高亮，高亮永远不会因文件状态失败，文件真实性由 host 负责。
 
-`DraftDecorations` 新增 `pathRefs`；InputBar 的 backdrop 把每个区间渲染为 `.pathRef` 标记（浅色底加点状下划线，与命令/提及的 `.textRef` 标记区分，沿用同一双层 advance 约定）并带 title 提示。由于 textarea 覆盖在 backdrop 之上，打开手势放在 textarea 上：光标落在高亮区间内时 Ctrl/⌘+点击调用经 `ComposerBarInjected` 注入的新回调 `openPath`。`apply.ts` 将其经助手文件提及打开所用的同一个 `resolveWorkspacePath(cwd, path)` 解析后接到 `ctx.workspaces.openPath`——扫描保留 `./`/`../`/`~/` 前缀而 host 打开器没有会话上下文，因此 token 在交给 host 前先按会话 cwd 解析——并沿用与 assistant 文件提及相同的静默 catch：host 无法解析的路径打开无果且绝不把 composer 报错抛给用户。
+`DraftDecorations` 新增 `pathRefs`；InputBar 的 backdrop 把每个区间渲染为 `.pathRef` 标记（浅色底加点状下划线，与命令/提及的 `.textRef` 标记区分，沿用同一双层 advance 约定）并带 title 提示。两条重叠规则保持装饰来源互不交叠：chip 占位符（U+FFFC）是路径连续边界，路径 token 绝不跨越 chip；同起点的 text-ref 若是 path ref 的严格前缀（词典中的 `/plan` 出现在 `/plan/assets` 里）则在推导时丢弃——路径是同一跨度的更具体读法——因此渲染出来的与 Ctrl/⌘+点击命中的完全一致。由于 textarea 覆盖在 backdrop 之上，打开手势放在 textarea 上：光标落在高亮区间内时 Ctrl/⌘+点击调用经 `ComposerBarInjected` 注入的新回调 `openPath`。`apply.ts` 将其经助手文件提及打开所用的同一个 `resolveWorkspacePath(cwd, path)` 解析后接到 `ctx.workspaces.openPath`——扫描保留 `./`/`../`/`~/` 前缀而 host 打开器没有会话上下文，因此 token 在交给 host 前先按会话 cwd 解析——并沿用与 assistant 文件提及相同的静默 catch：host 无法解析的路径打开无果且绝不把 composer 报错抛给用户。
 
 本功能是"装饰 + host 侧打开动词"，不引入文件行、文件输入、上传协议，也不改动加号按钮的 Command 启动器：想让 agent *读取*文件的用户仍然把路径作为消息发送（agent 的文件工具才是读者）；高亮与打开用于确认识别，并让用户无需离开草稿即可在 host 操作系统中触达该文件。
 

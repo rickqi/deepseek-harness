@@ -56,7 +56,12 @@ export interface DraftDecorations {
   readonly token: TokenRange | null
   /** Chip render instructions in draft order (occurrence table is offset-sorted). */
   readonly chips: readonly ChipRender[]
-  /** Scan-derived plain-text reference ranges (empty without a lexicon). */
+  /**
+   * Scan-derived plain-text reference ranges (empty without a lexicon).
+   * A same-start reference that is a strict prefix of a path ref is dropped
+   * here — the path is the more specific reading of the same span — so the
+   * rendered sources never overlap.
+   */
   readonly textRefs: readonly TextRefRange[]
   /** Scan-derived file-path ranges (independent of the lexicon). */
   readonly pathRefs: readonly PathRefRange[]
@@ -96,17 +101,22 @@ export function scanTextRefs(
 
 /**
  * Path-token matcher (forward-slash family): a leading `/`, `./`, `../` or
- * `~/` prefix then a path-ish run (no whitespace, no common CJK/ASCII
- * punctuation).
+ * `~/` prefix then a path-ish run (no whitespace, no chip placeholder
+ * U+FFFC, no common CJK/ASCII punctuation).
  */
-const FORWARD_PATH_RE = /(^|\s)((?:\/|\.{1,2}\/|~\/)[^\s，。、；：,;:（）()\[\]{}"'<>]+)/g
+const FORWARD_PATH_RE = /(^|\s)((?:\/|\.{1,2}\/|~\/)[^\s，。、；：,;:（）()\[\]{}"'\uFFFC<>]+)/g
 /**
- * Path-token matcher (backslash family): UNC `\\server\share\…` (at least
- * server + share), or a drive path `X:\…` / `X:/…` (forward-slash drive
+ * Path-token matcher (UNC family): `\\server\share\…` with at least server
+ * + share. Placeholder U+FFFC is excluded from every component so a path
+ * token can never span a chip.
+ */
+const UNC_PATH_RE = /(^|\s)(\\\\[^\s\\\uFFFC]+\\[^\s\\\uFFFC]+(?:\\[^\s\\\uFFFC]+)*)/g
+/**
+ * Path-token matcher (drive family): `X:\…` / `X:/…` (forward-slash drive
  * paths ride here too — the forward matcher cannot see them because the `/`
  * is glued to the drive letter's `:`).
  */
-const BACKSLASH_PATH_RE = /(^|\s)((?:\\\\[^\s\\]+\\[^\s\\]+(?:\\[^\s\\]+)*)|(?:[A-Za-z]:[\\/][^\s，。、；：,;:（）()\[\]{}"'<>]+))/g
+const DRIVE_PATH_RE = /(^|\s)([A-Za-z]:[\\/][^\s，。、；：,;:（）()\[\]{}"'\uFFFC<>]+)/g
 /** Trailing punctuation (or a stray separator) that can belong to a sentence, not the path. */
 const TRAILING_PUNCT = /[/\\.,;:。，；：]+$/
 
@@ -142,7 +152,7 @@ function toPathRef(match: RegExpExecArray): PathRefRange | null {
 export function scanPathRefs(draft: string): PathRefRange[] {
   if (draft === '') return []
   const out: PathRefRange[] = []
-  for (const re of [FORWARD_PATH_RE, BACKSLASH_PATH_RE]) {
+  for (const re of [FORWARD_PATH_RE, UNC_PATH_RE, DRIVE_PATH_RE]) {
     re.lastIndex = 0
     let m: RegExpExecArray | null
     while ((m = re.exec(draft)) !== null) {
@@ -179,5 +189,8 @@ export function deriveDecorations(
   const hint = claimActive && claim.hint !== undefined && draft.slice(claim.token.length).trim() === ''
     ? claim.hint
     : null
-  return { token, chips, textRefs: scanTextRefs(draft, lexicon), pathRefs: scanPathRefs(draft), hint }
+  const pathRefs = scanPathRefs(draft)
+  const textRefs = scanTextRefs(draft, lexicon)
+    .filter(ref => !pathRefs.some(path => path.start === ref.start && path.end > ref.end))
+  return { token, chips, textRefs, pathRefs, hint }
 }

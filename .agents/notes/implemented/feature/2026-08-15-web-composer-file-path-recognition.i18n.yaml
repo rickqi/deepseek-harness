@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-15-web-composer-file-path-recognition.md
-2026-08-15-web-composer-file-path-recognition.md: 71f3b5c44e69fb640ae8e5495af3fb05467e98c7
-2026-08-15-web-composer-file-path-recognition.zh.md: 7fcacd45b91cc77bc999ace925e3b4f9ea3b2132
+2026-08-15-web-composer-file-path-recognition.md: f8874320b20bfc800c25421d9b1d74e7f4222871
+2026-08-15-web-composer-file-path-recognition.zh.md: 58fe287f70c6482ef6c4ea13959dc6d34913810a

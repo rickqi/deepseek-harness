@@ -711,12 +711,35 @@ describe('decorations: scanPathRefs', () => {
     ])
   })
 
+  it('a chip placeholder is a continuation boundary: a path token never spans one', () => {
+    expect(scanPathRefs('/a\uFFFCb/c')).toEqual([])
+    expect(scanPathRefs('x /tmp/\uFFFCy.txt')).toEqual([])
+    // The truncated run keeps only the leading segment, so no range at all.
+    expect(scanPathRefs('\\\\s\uFFFCrv\\sh\\a')).toEqual([])
+  })
+
   it('deriveDecorations carries the path ranges through', () => {
     const m = new InputMachine()
     m.dispatch({ type: 'draft-changed', draft: 'read /etc/hosts now' })
     expect(deriveDecorations(m.state).pathRefs).toEqual([
       { start: 5, end: 15, path: '/etc/hosts' },
     ])
+  })
+
+  it('a same-start text-ref that is a strict prefix of a path ref is dropped at derivation', () => {
+    const lexicon = new Map<'/' | '@', readonly string[]>([['/', ['plan']]])
+    const m = new InputMachine()
+    // `/plan` is on the lexicon, `/plan/assets` is a path: the path wins and
+    // the command-style reference disappears, so hit-testing matches render.
+    m.dispatch({ type: 'draft-changed', draft: '/plan/assets' })
+    const deco = deriveDecorations(m.state, lexicon)
+    expect(deco.textRefs).toEqual([])
+    expect(deco.pathRefs).toEqual([{ start: 0, end: 12, path: '/plan/assets' }])
+    // Without the path continuation the same token stays a plain reference.
+    m.dispatch({ type: 'draft-changed', draft: '/plan x' })
+    const plain = deriveDecorations(m.state, lexicon)
+    expect(plain.textRefs).toEqual([{ start: 0, end: 5, trigger: '/' }])
+    expect(plain.pathRefs).toEqual([])
   })
 })
 

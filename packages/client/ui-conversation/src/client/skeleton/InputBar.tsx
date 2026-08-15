@@ -582,10 +582,13 @@ export function InputBar({
   const deco = input === undefined ? INERT_DECORATIONS : deriveDecorations(input, lexicon)
   const backdrop: ReactNode[] = []
   {
-    // Segment boundaries: the token range end, every chip offset, and every
-    // text-ref range — merged in draft order (the sources never
-    // overlap: chips sit on placeholders, text-refs on plain tokens, the
-    // claim token only leads).
+    // Segment boundaries: the token range end, every chip offset, every
+    // text-ref range, and every path range — merged in draft order. The
+    // sources never overlap by construction: chips sit on placeholder
+    // glyphs (U+FFFC is a path-continuation boundary), a same-start
+    // text-ref that is a strict prefix of a path ref is filtered at
+    // derivation (the path is the more specific reading), and the claim
+    // token only leads.
     let cursor = 0
     const pushPlain = (upTo: number): void => {
       if (upTo > cursor) backdrop.push(draft.slice(cursor, upTo))
