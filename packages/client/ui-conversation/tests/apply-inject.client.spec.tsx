@@ -240,6 +240,22 @@ describe('conversation slot inject API', () => {
     await b.runtime.dispose()
   })
 
+  it('openPath (composer bar face) resolves relative tokens against session cwd and passes absolute paths through', async () => {
+    const b = await bench()
+    const injected = b.composerApi(ROOT)
+    injected.openPath!('./src/a.ts')
+    injected.openPath!('/etc/hosts')
+    await vi.waitFor(() => {
+      expect(b.runtime.workspaces.calls).toEqual([
+        // resolveWorkspacePath joins the ./ prefix onto the cwd verbatim;
+        // the result is absolute and host-openable.
+        { method: 'openPath', args: ['/proj/./src/a.ts'] },
+        { method: 'openPath', args: ['/etc/hosts'] },
+      ])
+    })
+    await b.runtime.dispose()
+  })
+
   it('routes workspace switching through the runtime owner, carrying the draft', async () => {
     const b = await bench()
     const resident = b.residentApi(ROOT)

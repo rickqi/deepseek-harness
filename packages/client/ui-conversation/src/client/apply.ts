@@ -353,10 +353,14 @@ export function apply(ctx: Context): void {
           return result.ok && result.value.matched
         },
         openPath: (path) => {
-          // Mirrors the assistant file-mention open: host-side default-app
-          // open; failures are user-visible on the workspace side and must
-          // not surface as a composer error.
-          void workspaces.openPath(path).catch(() => {})
+          // Host-side default-app open, mirroring the assistant file-mention
+          // gesture. The scan preserves ./ ../ ~/ prefixes, so resolve the
+          // token against the session cwd before handing it to the host
+          // (the host opener has no session context). Failures stay silent
+          // exactly as the assistant gesture's do — the path opens nothing
+          // rather than surfacing a composer error.
+          const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
+          void workspaces.openPath(resolveWorkspacePath(cwd, path)).catch(() => {})
         },
         hooks: {
           notices: shell.notices,
@@ -402,8 +406,8 @@ export function apply(ctx: Context): void {
         openFile: (path) => {
           const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
           void workspaces.openPath(resolveWorkspacePath(cwd, path)).catch(() => {
-            // Host/OS open failures stay silent in the chat row; the native
-            // app surfaces its own error dialog when the path is unusable.
+            // Host/OS open failures stay silent in the chat row; the path
+            // opens nothing rather than surfacing an error here.
           })
         },
         loadOlder: () => { void scoped.loadOlder() },
